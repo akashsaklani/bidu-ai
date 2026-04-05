@@ -52,7 +52,7 @@ document.addEventListener("DOMContentLoaded", () => {
       console.log("Mic Output:", transcript);
 
       inputBox.value = transcript;
-      captureInput();
+      captureInput(true);
     };
 
     recognition.onend = () => {
@@ -159,6 +159,9 @@ document.addEventListener("DOMContentLoaded", () => {
       try {
         recognition.start();
         isListening = true;
+
+        startWave();
+
         console.log("🎤 Mic ON");
       } catch (e) {
         console.log("Mic already running");
@@ -166,6 +169,9 @@ document.addEventListener("DOMContentLoaded", () => {
     } else {
       recognition.stop();
       isListening = false;
+
+      stopMic();
+
       console.log("🛑 Mic OFF");
     }
   });
@@ -179,8 +185,26 @@ document.addEventListener("DOMContentLoaded", () => {
     chatBox.scrollTop = chatBox.scrollHeight;
   }
 
+  function triggerPulse() {
+    const frame = document.querySelector(".ai-frame");
+
+    frame.classList.add("pulse");
+
+    setTimeout(() => {
+      frame.classList.remove("pulse");
+    }, 800);
+  }
+
+  function speak(text) {
+    const speech = new SpeechSynthesisUtterance(text);
+    speech.rate = 1;
+    speech.pitch = 1;
+
+    window.speechSynthesis.speak(speech);
+  }
+
   // 🎯 MAIN FUNCTION (Input Handler)
-  function captureInput() {
+  function captureInput(isVoice = false) {
     let text = inputBox.value;
 
     // 1. Trim
@@ -193,23 +217,58 @@ document.addEventListener("DOMContentLoaded", () => {
     console.log("Clean Input:", text);
 
     // 3. Forward to next layer (for now just log)
-    processInput(text);
+    processInput(text, isVoice);
 
     // 4. Clear input
     inputBox.value = "";
   }
 
   // 🚀 TEMP CONTROLLER (next layer simulation)
-  function processInput(text) {
+  function getAIResponse(userText) {
+    const text = userText.toLowerCase();
+
+    if (text.includes("hello") || text.includes("hi")) {
+      return "Hello 👋 I’m Bidu AI!";
+    }
+
+    if (text.includes("time")) {
+      return "Time: " + new Date().toLocaleTimeString();
+    }
+
+    if (text.includes("date")) {
+      return "Date: " + new Date().toLocaleDateString();
+    }
+
+    if (text.includes("how are you")) {
+      return "I’m doing great 😄 What about you?";
+    }
+
+    return "I’m still learning... try something else 🤖";
+  }
+
+  function processInput(text, isVoice = false) {
     console.log("→ Sending to Understanding Layer:", text);
 
+    // USER MESSAGE
     addMessage(text, "user");
+
+    // AI RESPONSE
+    setTimeout(() => {
+      const response = getAIResponse(text);
+      addMessage(response, "bot");
+
+      triggerPulse();
+
+      if (isVoice) {
+        speak(response);
+      }
+    }, 500);
 
     scrollToBottom();
   }
 
   // 🖱 Button click
-  sendBtn.addEventListener("click", captureInput);
+  sendBtn.addEventListener("click", () => captureInput(false));
 
   // ⌨ Enter press
   inputBox.addEventListener("keydown", (e) => {
