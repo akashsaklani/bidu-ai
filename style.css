@@ -7,7 +7,6 @@ body {
     background: black;
     color: white;
     font-family: Arial, sans-serif;
-    overflow: hidden;
 }
 
 /* AI UI Box */
@@ -39,6 +38,8 @@ body {
     padding: 15px;
 
     overflow: hidden;
+
+    max-height: 90vh;
 }
 
 /* Chat */

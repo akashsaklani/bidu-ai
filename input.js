@@ -3,6 +3,17 @@ document.addEventListener("DOMContentLoaded", () => {
   const inputBox = document.getElementById("inputBox");
   const sendBtn = document.getElementById("sendBtn");
   const micBtn = document.getElementById("micBtn");
+  const actionBtn = document.getElementById("actionBtn");
+
+  actionBtn.addEventListener("click", () => {
+    if (window.pendingAction === "youtube") {
+      window.open("https://www.youtube.com", "_blank");
+    }
+
+    if (window.pendingAction === "google") {
+      window.open("https://www.google.com", "_blank");
+    }
+  });
 
   let recognition;
   let isListening = false;
@@ -34,8 +45,8 @@ document.addEventListener("DOMContentLoaded", () => {
     recognition = new SpeechRecognition();
 
     recognition.lang = "en-IN";
-    recognition.continuous = false;
-    recognition.interimResults = false;
+    recognition.continuous = true;   // 🔥 CHANGE
+    recognition.interimResults = true; // 🔥 CHANGE
 
     recognition.onstart = () => {
       console.log("🎤 Listening...");
@@ -46,26 +57,28 @@ document.addEventListener("DOMContentLoaded", () => {
     };
 
     recognition.onresult = (event) => {
-      console.log("RESULT EVENT TRIGGERED");
+      let transcript = "";
 
-      const transcript = event.results[0][0].transcript;
+      for (let i = event.resultIndex; i < event.results.length; i++) {
+        transcript += event.results[i][0].transcript;
+      }
+
+      transcript = transcript.trim();
+
+      if (!transcript) return;
+
       console.log("Mic Output:", transcript);
 
       inputBox.value = transcript;
-      captureInput(true);
+
+      // 🔥 only final result pe trigger
+      if (event.results[event.results.length - 1].isFinal) {
+        captureInput(true);
+      }
     };
 
     recognition.onend = () => {
       console.log("Stopped");
-
-      if (isListening) {
-        console.log("Restarting mic...");
-        try {
-          recognition.start();
-        } catch (e) {
-          console.log("Already started");
-        }
-      }
     };
 
     recognition.onerror = (event) => {
@@ -162,6 +175,12 @@ document.addEventListener("DOMContentLoaded", () => {
 
         startWave();
 
+        setTimeout(() => {
+          if (isListening) {
+            recognition.stop(); // 🔥 force end for mobile
+          }
+        }, 4000);
+
         console.log("🎤 Mic ON");
       } catch (e) {
         console.log("Mic already running");
@@ -195,10 +214,69 @@ document.addEventListener("DOMContentLoaded", () => {
     }, 800);
   }
 
+  // 🧠 UNDERSTANDING LAYER
+  function normalizeText(text) {
+    return text.toLowerCase().trim();
+  }
+
+  function detectIntent(text) {
+    if (text.includes("hello") || text.includes("hi")) {
+      return "greeting";
+    }
+
+    if (text.includes("time") || text.includes("date")) {
+      return "question";
+    }
+
+    if (
+      text.includes("open") ||
+      text.includes("search") ||
+      text.includes("go to")
+    ) {
+      return "command";
+    }
+
+    return "unknown";
+  }
+
+  function extractEntity(text) {
+    if (text.includes("youtube")) return "youtube";
+    if (text.includes("google")) return "google";
+
+    if (text.includes("time")) return "time";
+    if (text.includes("date")) return "date";
+
+    return null;
+  }
+
+  function understand(text) {
+    const cleanText = normalizeText(text);
+
+    return {
+      intent: detectIntent(cleanText),
+      entity: extractEntity(cleanText),
+      raw: text
+    };
+  }
+
   function speak(text) {
+    // 🔇 mic band karo
+    if (isListening) {
+      recognition.stop();
+    }
+
     const speech = new SpeechSynthesisUtterance(text);
-    speech.rate = 1;
-    speech.pitch = 1;
+
+    speech.onend = () => {
+      // 🎤 wapas mic ON
+      if (isListening) {
+        try {
+          recognition.start();
+        } catch (e) {
+          console.log("Mic restart issue");
+        }
+      }
+    };
 
     window.speechSynthesis.speak(speech);
   }
@@ -225,29 +303,51 @@ document.addEventListener("DOMContentLoaded", () => {
 
   // 🚀 TEMP CONTROLLER (next layer simulation)
   function getAIResponse(userText) {
-    const text = userText.toLowerCase();
+    const data = understand(userText);
 
-    if (text.includes("hello") || text.includes("hi")) {
-      return "Hello 👋 I’m Bidu AI!";
+    const intent = data.intent;
+    const entity = data.entity;
+
+    // 🟢 GREETING
+    if (intent === "greeting") {
+      return "Hello 👋 I’m Bidu AI";
     }
 
-    if (text.includes("time")) {
-      return "Time: " + new Date().toLocaleTimeString();
+    // 🔵 QUESTION
+    if (intent === "question") {
+      if (entity === "time") {
+        return "Time: " + new Date().toLocaleTimeString();
+      }
+
+      if (entity === "date") {
+        return "Date: " + new Date().toLocaleDateString();
+      }
     }
 
-    if (text.includes("date")) {
-      return "Date: " + new Date().toLocaleDateString();
+    // 🟡 COMMAND
+    if (intent === "command") {
+      if (entity === "youtube") {
+        window.pendingAction = "youtube";
+        actionBtn.click(); // ✅ real click trigger
+        return "Opening YouTube...";
+      }
+
+      if (entity === "google") {
+        window.pendingAction = "google";
+        actionBtn.click();
+        return "Opening Google...";
+      }
     }
 
-    if (text.includes("how are you")) {
-      return "I’m doing great 😄 What about you?";
-    }
-
+    // 🔴 DEFAULT
     return "I’m still learning... try something else 🤖";
   }
 
   function processInput(text, isVoice = false) {
     console.log("→ Sending to Understanding Layer:", text);
+
+    const data = understand(text);
+    console.log("UNDERSTANDING:", data);
 
     // USER MESSAGE
     addMessage(text, "user");
