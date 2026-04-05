@@ -4,50 +4,179 @@ document.addEventListener("DOMContentLoaded", () => {
   const sendBtn = document.getElementById("sendBtn");
   const micBtn = document.getElementById("micBtn");
 
+  let recognition;
   let isListening = false;
 
-  const recognition = new (window.SpeechRecognition || window.webkitSpeechRecognition)();
+  // 🎯 Add message to chat
+  function addMessage(text, sender) {
+    const chatBox = document.getElementById("chatBox");
 
-  recognition.continuous = false;
-  recognition.interimResults = false;
-  recognition.lang = "en-IN";
+    const msg = document.createElement("div");
+    msg.classList.add("message");
 
-  recognition.onstart = () => {
-    isListening = true;
-    console.log("🎤 Listening...");
-  };
-
-  recognition.onresult = (event) => {
-    const text = event.results[0][0].transcript;
-    console.log("Voice:", text);
-
-    document.getElementById("inputBox").value = text;
-    sendMessage();
-  };
-
-  recognition.onerror = (event) => {
-    console.log("Mic Error:", event.error);
-
-    if (event.error === "no-speech") {
-      console.log("⚠️ Retry...");
+    if (sender === "user") {
+      msg.classList.add("user-message");
+      msg.innerText = "User: " + text;
+    } else {
+      msg.classList.add("bot-message");
+      msg.innerText = "Bidu: " + text;
     }
+
+    chatBox.appendChild(msg);
+
+    // auto scroll
+    chatBox.scrollTop = chatBox.scrollHeight;
+  }
+
+  // Initialize voice recognition
+  const initSpeechRecognition = () => {
+    const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+    recognition = new SpeechRecognition();
+
+    recognition.lang = "en-IN";
+    recognition.continuous = false;
+    recognition.interimResults = false;
+
+    recognition.onstart = () => {
+      console.log("🎤 Listening...");
+    };
+
+    recognition.onspeechstart = () => {
+      console.log("🗣 Speech detected");
+    };
+
+    recognition.onresult = (event) => {
+      console.log("RESULT EVENT TRIGGERED");
+
+      const transcript = event.results[0][0].transcript;
+      console.log("Mic Output:", transcript);
+
+      inputBox.value = transcript;
+      captureInput();
+    };
+
+    recognition.onend = () => {
+      console.log("Stopped");
+
+      if (isListening) {
+        console.log("Restarting mic...");
+        try {
+          recognition.start();
+        } catch (e) {
+          console.log("Already started");
+        }
+      }
+    };
+
+    recognition.onerror = (event) => {
+      console.log("Mic Error:", event.error);
+
+      if (event.error === "no-speech") {
+        console.log("⚠️ kuch nahi bola");
+      }
+    };
   };
 
-  recognition.onend = () => {
-    isListening = false;
-    console.log("Stopped");
-  };
+  initSpeechRecognition();
 
-  document.getElementById("micBtn").addEventListener("click", () => {
+  // Auto-height for textarea
+  inputBox.addEventListener("input", () => {
+    inputBox.style.height = "auto";
+    inputBox.style.height = inputBox.scrollHeight + "px";
+  });
+
+  // Wave visualization
+  let stream;
+  let isMicOn = false;
+  let audioContext;
+  let analyser;
+  let dataArray;
+
+  async function startWave() {
+    try {
+      stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+
+      audioContext = new AudioContext();
+      analyser = audioContext.createAnalyser();
+
+      const source = audioContext.createMediaStreamSource(stream);
+      source.connect(analyser);
+
+      analyser.fftSize = 64;
+      dataArray = new Uint8Array(analyser.frequencyBinCount);
+
+      isMicOn = true;
+
+      animateWave();
+    } catch (error) {
+      console.log("Mic access denied:", error);
+    }
+  }
+
+  function stopMic() {
+    if (stream) {
+      stream.getTracks().forEach(track => track.stop());
+    }
+
+    if (audioContext) {
+      audioContext.close();
+    }
+
+    isMicOn = false;
+
+    // wave reset
+    document.querySelectorAll(".wave span").forEach(bar => {
+      bar.style.height = "5px";
+    });
+  }
+
+  function animateWave() {
+    if (!isMicOn) return;
+
+    requestAnimationFrame(animateWave);
+
+    analyser.getByteFrequencyData(dataArray);
+
+    const bars = document.querySelectorAll(".wave span");
+
+    bars.forEach((bar, i) => {
+      let value = dataArray[i];
+
+      // threshold
+      if (value < 20) value = 0;
+
+      let height = (value / 255) * 35;
+
+      bar.style.height = height + "px";
+    });
+  }
+
+
+
+  // 🎤 button
+  micBtn.addEventListener("click", () => {
     if (!isListening) {
-      recognition.start();
+      try {
+        recognition.start();
+        isListening = true;
+        console.log("🎤 Mic ON");
+      } catch (e) {
+        console.log("Mic already running");
+      }
     } else {
       recognition.stop();
+      isListening = false;
+      console.log("🛑 Mic OFF");
     }
   });
 
   function sendMessage() {
     captureInput();
+  }
+
+  function scrollToBottom() {
+    const chatBox = document.getElementById("chatBox");
+    chatBox.scrollTop = chatBox.scrollHeight;
   }
 
   // 🎯 MAIN FUNCTION (Input Handler)
@@ -60,6 +189,7 @@ document.addEventListener("DOMContentLoaded", () => {
     // 2. Validate
     if (text === "") return;
 
+    console.log("CAPTURE CALLED:", text);
     console.log("Clean Input:", text);
 
     // 3. Forward to next layer (for now just log)
@@ -73,16 +203,9 @@ document.addEventListener("DOMContentLoaded", () => {
   function processInput(text) {
     console.log("→ Sending to Understanding Layer:", text);
 
-    const chatBox = document.getElementById("chatBox");
+    addMessage(text, "user");
 
-    const msg = document.createElement("div");
-    msg.innerText = "User: " + text;
-    msg.style.background = "#2563eb";
-    msg.style.padding = "8px";
-    msg.style.margin = "5px";
-    msg.style.borderRadius = "8px";
-
-    chatBox.appendChild(msg);
+    scrollToBottom();
   }
 
   // 🖱 Button click
